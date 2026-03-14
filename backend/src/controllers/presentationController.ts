@@ -53,6 +53,16 @@ export const createPresentation = async (req: AuthRequest, res: Response) => {
       },
     });
 
+    // Increment usage count
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        presentationsCreatedThisMonth: {
+          increment: 1,
+        },
+      },
+    });
+
     res.status(201).json(presentation);
   } catch (error) {
     console.error('Error creating presentation:', error);

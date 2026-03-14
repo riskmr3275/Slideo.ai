@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../index';
 import { validationResult } from 'express-validator';
+import { sendWelcomeEmail } from '../services/emailService';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
 
@@ -35,6 +36,11 @@ export const signup = async (req: Request, res: Response) => {
       expiresIn: '24h',
     });
 
+    // Send welcome email (non-blocking)
+    sendWelcomeEmail(user.email, user.email).catch((err) =>
+      console.error('[EmailService] Welcome email failed:', err.message)
+    );
+
     res.status(201).json({ user, token });
   } catch (error) {
     res.status(500).json({ error: 'Failed to create user' });
@@ -51,7 +57,7 @@ export const login = async (req: Request, res: Response) => {
     const { email, password } = req.body;
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
+    if (!user || !user.password) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 

@@ -1,4 +1,5 @@
 import express from 'express';
+import { createServer } from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
@@ -6,6 +7,7 @@ import { PrismaClient } from '@prisma/client';
 dotenv.config();
 
 const app = express();
+const httpServer = createServer(app);
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 4000;
 
@@ -14,7 +16,11 @@ import presentationRoutes from './routes/presentationRoutes';
 import uploadRoutes from './routes/uploadRoutes';
 import importRoutes from './routes/importRoutes';
 import templateRoutes from './routes/templateRoutes';
+import emailRoutes from './routes/emailRoutes';
+import shareRoutes from './routes/shareRoutes';
+import planRoutes from './routes/planRoutes';
 import { errorHandler } from './middleware/errorHandler';
+import { setupCollaborationSocket } from './services/collaborationSocket';
 
 app.use(cors());
 app.use(express.json());
@@ -30,6 +36,9 @@ app.use('/api/presentations', presentationRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/import', importRoutes);
 app.use('/api/templates', templateRoutes);
+app.use('/api/email', emailRoutes);
+app.use('/api/share', shareRoutes);
+app.use('/api/plans', planRoutes);
 console.log('Routes registered.');
 
 app.get('/api/templates/debug', (req, res) => {
@@ -52,7 +61,8 @@ import { setupWorker } from './workers/presentationWorker';
 
 if (process.env.NODE_ENV !== 'test') {
   setupWorker();
-  app.listen(PORT, () => {
+  setupCollaborationSocket(httpServer);
+  httpServer.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
   });
 }

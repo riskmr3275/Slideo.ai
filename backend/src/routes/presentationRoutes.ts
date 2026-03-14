@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
+import { checkLimits, checkSlideCountLimit } from '../middleware/limitMiddleware';
 import {
   createPresentation,
   getUserPresentations,
@@ -13,8 +14,8 @@ const router = Router();
 
 router.use(authenticate); // Protect all presentation routes
 
-router.post('/', createPresentation);
-router.post('/generate-slide', generateSingleSlide);
+router.post('/', checkLimits, checkSlideCountLimit, createPresentation);
+router.post('/generate-slide', checkLimits, generateSingleSlide);
 router.get('/', getUserPresentations);
 router.get('/:id', getPresentationById);
 router.put('/:id', updatePresentation);

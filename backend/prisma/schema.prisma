@@ -7,14 +7,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Plan {
+  FREE
+  PRO
+  TEAM
+  ENTERPRISE
+}
+
 model User {
-  id            String         @id @default(uuid())
-  email         String         @unique
-  password      String
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  imports       ImportedPpt[]
-  presentations Presentation[]
+  id                            String         @id @default(uuid())
+  email                         String         @unique
+  password                      String?
+  googleId                      String?        @unique
+  provider                      String         @default("local")
+  plan                          Plan           @default(FREE)
+  presentationsCreatedThisMonth Int            @default(0)
+  lastUsageReset                DateTime       @default(now())
+  subscriptionId                String?
+  createdAt                     DateTime       @default(now())
+  updatedAt                     DateTime       @updatedAt
+  imports                       ImportedPpt[]
+  presentations                 Presentation[]
 }
 
 model Presentation {
@@ -24,7 +37,20 @@ model Presentation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id])
-  slides    Slide[]
+  slides      Slide[]
+  shareTokens ShareToken[]
+}
+
+model ShareToken {
+  id             String       @id @default(uuid())
+  presentationId String
+  token          String       @unique @default(uuid())
+  recipientEmail String
+  permission     String       @default("view") // "view" | "edit"
+  expiresAt      DateTime
+  used           Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  presentation   Presentation @relation(fields: [presentationId], references: [id])
 }
 
 model Slide {
