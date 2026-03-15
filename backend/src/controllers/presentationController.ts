@@ -10,24 +10,38 @@ export const createPresentation = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { topic, slideCount, tone, language, textContentAmount, slides } = req.body;
+    const { topic, slideCount, tone, language, textContentAmount, themeId, imageStyle, templateId, slides } = req.body;
 
     if (!topic && !slides) {
       return res.status(400).json({ error: 'Topic or manual slides are required' });
     }
 
     let finalSlides = [];
+    let requiredLayouts: string[] | undefined = undefined;
+
+    if (templateId) {
+      const template = await (prisma as any).template.findUnique({
+        where: { id: templateId },
+        include: { slides: { orderBy: { index: 'asc' } } }
+      });
+      if (template) {
+        requiredLayouts = template.slides.map((s: any) => s.layout);
+      }
+    }
 
     if (slides && Array.isArray(slides)) {
       // Manual path (Templates)
       finalSlides = slides;
     } else {
       // AI generation path
-      const count = parseInt(slideCount as string, 10) || 5;
+      const count = requiredLayouts ? requiredLayouts.length : (parseInt(slideCount as string, 10) || 5);
       const advancedOptions = {
         tone: tone as string | undefined,
         language: language as string | undefined,
-        textContentAmount: textContentAmount as string | undefined
+        textContentAmount: textContentAmount as string | undefined,
+        themeId: themeId as string | undefined,
+        imageStyle: imageStyle as string | undefined,
+        requiredLayouts
       };
       finalSlides = await generatePresentationSlides(topic, count, advancedOptions);
     }

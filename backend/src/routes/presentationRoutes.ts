@@ -9,6 +9,7 @@ import {
   generateSingleSlide,
   deletePresentation,
 } from '../controllers/presentationController';
+import { exportToPptx } from '../controllers/exportController';
 
 const router = Router();
 
@@ -20,5 +21,6 @@ router.get('/', getUserPresentations);
 router.get('/:id', getPresentationById);
 router.put('/:id', updatePresentation);
 router.delete('/:id', deletePresentation);
+router.get('/:id/export/pptx', exportToPptx);
 
 export default router;
