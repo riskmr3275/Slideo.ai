@@ -1,129 +1,6 @@
-import { GoogleGenAI, Type, Schema } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || 'dummy_key_if_not_set' });
-
-const responseSchema: Schema = {
-  type: Type.ARRAY,
-  description: 'List of presentation slides matching the structured slide design system',
-  items: {
-    type: Type.OBJECT,
-    properties: {
-      layout: {
-        type: Type.STRING,
-        description:
-          'Slide layout type: hero | section-title | bullet-slide | card-grid | numbered-cards | timeline | steps | comparison | stats | quote | diagram',
-      },
-      themeChoice: {
-        type: Type.STRING,
-        description:
-          'Theme name from the approved theme palette list. Must stay within the chosen palette family for the whole presentation.',
-      },
-      contentJSON: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          subtitle: { type: Type.STRING },
-
-          // bullet-slide layout
-          bullets: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: 'Array of bullet point strings. Used for bullet-slide layout. Minimum 3 items.',
-          },
-
-          // card-grid, numbered-cards, diagram layouts
-          cards: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                icon: { type: Type.STRING, description: 'Lucide icon name (lowercase-kebab): e.g. zap, brain, shield' },
-                title: { type: Type.STRING },
-                description: { type: Type.STRING },
-              },
-            },
-            description: 'Array of cards. Use 3–4 items for card-grid. Use 3–5 for numbered-cards or diagram.',
-          },
-
-          // stats layout
-          stats: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                value: { type: Type.STRING, description: 'The stat number or metric, e.g. "94%", "$2.4M", "3x"' },
-                label: { type: Type.STRING, description: 'Short label for the stat, e.g. "Accuracy"' },
-                description: { type: Type.STRING, description: 'One-sentence explanation of the stat' },
-              },
-            },
-            description: 'Array of statistics. Use 3–4 items.',
-          },
-
-          // timeline layout
-          timelineEvents: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                date: { type: Type.STRING, description: 'Date, year, or phase label, e.g. "2021", "Phase 1", "Q3"' },
-                title: { type: Type.STRING },
-                description: { type: Type.STRING },
-              },
-            },
-            description: 'Array of timeline events ordered chronologically. Use 3–5 items.',
-          },
-
-          // steps layout
-          steps: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                description: { type: Type.STRING },
-              },
-            },
-            description: 'Array of sequential process steps. Use 3–5 items.',
-          },
-
-          // comparison layout
-          comparisonItems: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                left: { type: Type.STRING, description: 'A pros/advantages/option-A point' },
-                right: { type: Type.STRING, description: 'A cons/disadvantages/option-B point' },
-              },
-            },
-            description: 'Array of comparison rows with left (pros/option A) and right (cons/option B) text. Use 3–5 rows.',
-          },
-
-          // comparison column headers
-          leftLabel: {
-            type: Type.STRING,
-            description: 'Header for the left comparison column, e.g. "Advantages", "Option A", "Traditional"',
-          },
-          rightLabel: {
-            type: Type.STRING,
-            description: 'Header for the right comparison column, e.g. "Disadvantages", "Option B", "Modern"',
-          },
-
-          // quote layout
-          quote: {
-            type: Type.OBJECT,
-            properties: {
-              text: { type: Type.STRING, description: 'The quotation text (1–3 sentences max)' },
-              author: { type: Type.STRING, description: 'Author name and title, e.g. "Alan Turing, Computer Scientist"' },
-            },
-          },
-        },
-        required: ['title'],
-      },
-    },
-    required: ['layout', 'themeChoice', 'contentJSON'],
-  },
-};
 
 // Palette families for consistent theming across slides
 const PALETTE_FAMILIES: Record<string, string[]> = {
@@ -162,127 +39,209 @@ export const generatePresentationSlides = async (
       ? `Visual Style for images: ${advancedOptions.imageStyle}. Describe images that fit this aesthetic.`
       : '';
 
-    // Determine palette family and force theme if requested
-    let paletteFamilyInstruction = '';
-    let forceThemeInstruction = '';
-
-    if (advancedOptions?.themeId) {
-      const themeId = advancedOptions.themeId;
-      let family = 'light-professional'; // Default
-      for (const [fname, themes] of Object.entries(PALETTE_FAMILIES)) {
-        if (themes.includes(themeId)) {
-          family = fname;
-          break;
-        }
-      }
-      
-      paletteFamilyInstruction = `CRITICAL: You MUST use the "${family}" palette family only.`;
-      forceThemeInstruction = `The user has specifically selected the theme "${themeId}". You MUST use "${themeId}" for the FIRST slide (hero) and primarily use it or very close variations from the same family for other slides.`;
-    }
-
-    let layoutInstruction = `Generate ${count} slides.`;
+    let layoutInstruction = `Slide Count: Exactly ${count} slides.`;
     if (advancedOptions?.requiredLayouts) {
-      layoutInstruction = `CRITICAL: You MUST generate EXACTLY ${count} slides with the following layouts in this EXACT order: [${advancedOptions.requiredLayouts.join(', ')}]. Do not skip or change any.`;
+      layoutInstruction = `CRITICAL: You MUST generate EXACTLY ${count} slides that map visually to these layouts in order: [${advancedOptions.requiredLayouts.join(', ')}]. Do not skip any. Use the blocks that best fit each required layout.`;
     }
 
-    const prompt = `You are an expert AI presentation architect. Your task is to generate professional presentation slides about: "${topic}".
+    const prompt = `You are an advanced presentation design AI responsible for generating structured slides for a modern presentation editor similar to Gamma.app.
 
+Your job is to generate visually balanced slides using block-based layouts.
+
+Do not generate simple text slides.
+
+---
+
+SYSTEM CONTEXT
+
+Slides are rendered using a block-based design engine.
+
+Each slide is composed of visual blocks stacked vertically.
+
+Supported blocks:
+header, paragraph, cards, bullet-list, stats, steps, timeline, quote, image, chart
+
+Each slide must contain at least TWO blocks.
+Slides must visually fill the layout and avoid large empty spaces.
+
+---
+
+VISUAL DENSITY RULES
+
+Slides must follow visual density rules:
+• slides must include at least one visual block
+• visual blocks include cards, stats, steps, bullet lists
+• paragraphs should never appear alone
+
+Bad slide example:
+header
+paragraph
+
+Good slide example:
+header
+paragraph
+cards
+
+---
+
+CARD GRID RULES
+
+Card blocks must include layout hints.
+Example:
+{
+"type":"cards",
+"layout":"grid",
+"columns":2,
+"items":[
+  {"icon":"zap", "title":"Performance", "description":"High performing teams focus... "}
+]
+}
+
+Column rules:
+4 cards → 2x2 grid
+3 cards → 3 column grid
+2 cards → 2 column grid
+
+---
+
+BULLET LIST RULES
+
+Bullet lists must contain 4–6 items.
+Example:
+{
+"type":"bullet-list",
+"title":"Key Insights",
+"items":[
+  "Improves employee engagement",
+  "Encourages innovation"
+]
+}
+
+---
+
+STATS BLOCK RULES
+
+Stats blocks must contain 3–4 statistics.
+Example:
+{
+"type":"stats",
+"layout":"grid",
+"columns":2,
+"items":[
+  {"value":"87%", "label":"Employee Retention", "description":"Strong culture improves retention."}
+]
+}
+
+---
+
+STEP BLOCK RULES
+
+Steps blocks must contain sequential process information.
+Example:
+{
+"type":"steps",
+"layout":"horizontal",
+"items":[
+  {"title": "Define Vision", "description": "Establish clear values."}
+]
+}
+
+---
+
+VISUAL HIERARCHY
+
+Slides must maintain hierarchy.
+1. header (largest text)
+2. subtitle or paragraph
+3. visual content block
+
+Never generate slides containing only text.
+
+---
+
+LAYOUT BALANCE
+
+Slides must appear visually balanced.
+Rules:
+• combine text blocks with visual blocks
+• avoid long paragraphs
+• distribute content evenly
+
+---
+
+DYNAMIC INSTRUCTIONS FOR THIS GENERATION
+
+Topic: "${topic}"
 ${layoutInstruction}
 ${toneInstruction}
 ${languageInstruction}
 ${contentDensity}
 ${imageStyleInstruction}
 
-═══════════════════════════════════════════
-STEP 1 — PALETTE SELECTION (CRITICAL RULE)
-═══════════════════════════════════════════
-${paletteFamilyInstruction || 'Pick ONE palette family for the entire presentation. All slides must use themes from this ONE family only.'}
-${forceThemeInstruction}
+---
 
-PALETTE FAMILIES (pick exactly one):
-- dark-formal: midnight-dark, obsidian, blackout, abyss, dark-knight, carbon, midnight-city
-- light-professional: minimal-light, slate-light, cool-light, warm-light, corporate-blue, pearl, silver
-- gradient-vibrant: purple-gradient, ocean-gradient, emerald-gradient, neon-blue, executive, electric-violet
-- pastel-friendly: lavender-haze, mint-tea, gold-rush, aurora, peach-fuzz, rose-water, spring
-- cinematic-dark: royal-velvet, blood-moon, galaxy, space-dust, retrowave, sunset-gradient
+OUTPUT FORMAT
 
-Guidelines for picking:
-- Academic/Research/Science → dark-formal or gradient-vibrant
-- Business/Finance/Corporate → light-professional
-- Creative/Startup/Product → gradient-vibrant or pastel-friendly
-- Health/Wellness → pastel-friendly or light-professional
-- Technology/AI/Future → dark-formal or gradient-vibrant
+Return slides as structured JSON.
+Example:
 
-You MAY vary the specific theme within the family for visual interest, for example:
-  Slide 1 (hero) → midnight-dark
-  Slide 2 (section) → abyss
-  Slide 3 (cards) → obsidian
-  Slide 4 (stats) → dark-knight
-DO NOT mix families (e.g., do NOT use midnight-dark on one slide and lavender-haze on another).
+{
+"slides":[
+  {
+    "blocks":[
+      {
+        "type":"header",
+        "text":"Company Culture"
+      },
+      {
+        "type":"paragraph",
+        "text":"Understanding how culture shapes innovation and collaboration."
+      },
+      {
+        "type":"cards",
+        "layout":"grid",
+        "columns":2,
+        "items":[
+          {
+            "icon":"zap",
+            "title":"Performance",
+            "description":"High-performing teams focus on measurable outcomes."
+          },
+          {
+            "icon":"brain",
+            "title":"Innovation",
+            "description":"Creative thinking drives long-term growth."
+          },
+          {
+            "icon":"shield",
+            "title":"Security",
+            "description":"Strong security practices build trust."
+          },
+          {
+            "icon":"users",
+            "title":"Collaboration",
+            "description":"Cross-team communication accelerates development."
+          }
+        ]
+      }
+    ]
+  }
+]
+}
 
-═══════════════════════════════
-STEP 2 — LAYOUT SELECTION RULES
-═══════════════════════════════
-Choose the BEST layout for each section's content:
-
-| Situation | Layout to use |
-|-----------|--------------|
-| Opening slide | hero |
-| Major section transition | section-title |
-| 3–4 key concepts or features | card-grid |
-| Numbered list of items (prioritized) | numbered-cards |
-| Long explanation or key points list | bullet-slide |
-| Sequential process or workflow | steps |
-| Historical events or roadmap | timeline |
-| Pros vs cons or A vs B | comparison |
-| Key metrics or KPIs | stats |
-| Single impactful quote or insight | quote |
-| System architecture or flow diagram | diagram |
-| Closing slide | hero |
-
-Presentation structure rules:
-- FIRST slide MUST be "hero" layout
-- LAST slide should be "hero" or "quote" layout  
-- Space out layouts — do not repeat the same layout consecutively (except hero at start/end)
-- Aim for variety across the ${slideCount} slides
-- Include at least one stats slide if topic has any metrics or numbers
-- Include steps or timeline if topic has any process or history
-
-═══════════════════════════════
-STEP 3 — SLIDE TYPE CLASSIFIER (ARCHITECTURAL)
-═══════════════════════════════
-Follow these exact rules to select the layout for each slide:
-- If slide contains a bold introduction or opening → hero
-- If slide contains statistics or numerical metrics → stats
-- If slide contains multiple key concepts or features → card-grid
-- If slide contains a prioritized list → numbered-cards
-- If slide contains sequential steps or a process → steps
-- If slide contains chronological events → timeline
-- If slide contains data comparisons → comparison
-- If slide contains a high-impact quote → quote
-- If slide contains a conceptual overview with multiple points → card-grid
-- Default for simple text lists → bullet-slide
-
-═══════════════════════════════
-STEP 4 — CONTENT QUALITY & STRUCTURING (MANDATORY)
-═══════════════════════════════
-- EVERY slide must be "visually full" as per Gamma/Canva standards.
-- bullet-slide: Exactly 4-6 rich bullet points.
-- card-grid: Exactly 4 items (each with icon, title, 15-25 word description).
-- stats: Exactly 4 distinct metrics with realistic numerical values and context.
-- steps: Exactly 4 sequential steps with clear instructions.
-- timeline: Exactly 4 chronological milestones.
-- comparison: Exactly 4 rows comparing "Feature", "Benefit", or "Outcome".
-- ALL Descriptions must be full, professional sentences. No fragments.
-
-Generate ${slideCount} slides now as a JSON array. Each slide object: { layout, contentJSON }.`;
+FINAL OBJECTIVE
+Generate presentation slides that resemble visually rich slides created in Gamma.
+Slides must:
+• contain multiple blocks
+• include visual blocks
+• avoid plain text layouts
+• provide layout hints for rendering engines`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-1.5-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
-        responseSchema,
         temperature: 0.75,
       },
     });
@@ -292,18 +251,90 @@ Generate ${slideCount} slides now as a JSON array. Each slide object: { layout, 
       throw new Error('Failed to generate content from Gemini');
     }
 
-    // Clean up potential markdown formatting if the model disobeys
+    // Clean up potential markdown formatting
     const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsedJson = JSON.parse(cleanText);
 
-    return Array.isArray(parsedJson) ? parsedJson : [];
+    const rawSlides = Array.isArray(parsedJson.slides) ? parsedJson.slides : (Array.isArray(parsedJson) ? parsedJson : []);
+
+    // Transform blocks back to layout mapped objects for the frontend
+    const mappedSlides = rawSlides.map((slideObj: any, idx: number) => {
+      let layout = 'hero';
+      const contentJSON: any = {};
+      const blocks = Array.isArray(slideObj.blocks) ? slideObj.blocks : [];
+
+      let slideTheme = advancedOptions?.themeId || 'minimal-light';
+      let familyThemes = [slideTheme];
+      for (const themes of Object.values(PALETTE_FAMILIES)) {
+        if (themes.includes(slideTheme)) {
+          familyThemes = themes;
+          break;
+        }
+      }
+      const themeChoice = familyThemes[idx % familyThemes.length];
+
+      for (const block of blocks) {
+        if (!block || typeof block !== 'object') continue;
+        
+        if (block.type === 'header') {
+          contentJSON.title = block.text;
+        } else if (block.type === 'paragraph') {
+          contentJSON.subtitle = block.text;
+        } else if (block.type === 'cards') {
+          // Process columns rule mapping
+          if (block.columns === 2 || block.items?.length === 2 || block.items?.length === 4) {
+             layout = 'card-grid'; // generic grid layout which handles 2x2
+          } else if (block.columns === 3 || block.items?.length === 3) {
+             layout = 'three-cards';
+          } else {
+             layout = 'card-grid';
+          }
+          contentJSON.cards = Array.isArray(block.items) ? block.items : [];
+        } else if (block.type === 'bullet-list') {
+          layout = 'bullet-slide';
+          contentJSON.bullets = Array.isArray(block.items) ? block.items : [];
+          if (block.title) contentJSON.title = block.title;
+        } else if (block.type === 'stats') {
+          layout = 'stats';
+          contentJSON.stats = Array.isArray(block.items) ? block.items : [];
+        } else if (block.type === 'steps') {
+          layout = 'steps';
+          contentJSON.steps = Array.isArray(block.items) ? block.items : [];
+        } else if (block.type === 'timeline') {
+          layout = 'timeline';
+          contentJSON.timelineEvents = Array.isArray(block.items) ? block.items : [];
+        } else if (block.type === 'quote') {
+          layout = 'quote';
+          contentJSON.quote = { text: block.text || '', author: block.author || '' };
+        } else if (block.type === 'image') {
+          layout = 'image-left'; 
+        } else if (block.type === 'chart' || block.type === 'diagram') {
+          layout = 'diagram';
+          contentJSON.cards = Array.isArray(block.items) ? block.items : [];
+        }
+      }
+
+      if (idx === 0) {
+         layout = 'hero';
+      }
+
+      if (advancedOptions?.requiredLayouts && advancedOptions.requiredLayouts[idx]) {
+        layout = advancedOptions.requiredLayouts[idx];
+      }
+
+      return {
+        layout,
+        themeChoice,
+        contentJSON
+      };
+    });
+
+    return mappedSlides;
   } catch (error) {
     console.error('Error generating presentation:', error);
-    // Fallback to structured mock data
     const fallbackCount = advancedOptions?.requiredLayouts ? advancedOptions.requiredLayouts.length : slideCount;
     const fallbackTheme = advancedOptions?.themeId || 'minimal-light';
     
-    // Find family for fallback variations if themeId isn't the only one we want to use
     let familyThemes = [fallbackTheme];
     for (const themes of Object.values(PALETTE_FAMILIES)) {
       if (themes.includes(fallbackTheme)) {
@@ -313,7 +344,7 @@ Generate ${slideCount} slides now as a JSON array. Each slide object: { layout, 
     }
 
     return Array.from({ length: fallbackCount }).map((_, i) => {
-      const layouts = ['hero', 'bullet-slide', 'card-grid', 'stats', 'steps', 'timeline', 'comparison', 'quote', 'three-cards', 'four-grid', 'diagram', 'numbered-cards'];
+      const layouts = ['hero', 'bullet-slide', 'card-grid', 'stats', 'steps', 'timeline', 'comparison', 'quote'];
       const layout = advancedOptions?.requiredLayouts 
         ? advancedOptions.requiredLayouts[i]
         : (i === 0 ? 'hero' : i === fallbackCount - 1 ? 'quote' : layouts[i % layouts.length]);
@@ -322,51 +353,50 @@ Generate ${slideCount} slides now as a JSON array. Each slide object: { layout, 
         ? fallbackTheme 
         : familyThemes[i % familyThemes.length];
 
-      // Robust mock data for ANY layout
       const content: any = {
         title: i === 0 ? topic : `Key Insight ${i}: Detailed Analysis`,
         subtitle: `In-depth exploration of ${topic} and its strategic implications for modern development.`,
       };
 
-      if (layout === 'bullet-slide' || layout === 'list' || layout === 'bullets') {
+      if (['bullet-slide', 'list'].includes(layout)) {
         content.bullets = [
           'Comprehensive industry-leading analysis and reporting',
-          'Strategic implementation of core principles and values',
+          'Strategic implementation of core principles',
           'Data-driven decision making for optimal performance',
           'User-centric design focus with accessibility in mind'
         ];
       }
 
-      if (['card-grid', 'three-cards', 'four-grid', 'numbered-cards', 'diagram', 'grid'].includes(layout)) {
+      if (['card-grid', 'numbered-cards', 'diagram'].includes(layout)) {
         content.cards = [
-          { icon: 'zap', title: 'Performance', description: 'Blazing fast load times and optimized runtime efficiency.' },
-          { icon: 'shield', title: 'Security', description: 'Enterprise-grade protection and deep security auditing.' },
-          { icon: 'brain', title: 'Intelligence', description: 'Advanced AI driven workflows and predictive analytics.' },
-          { icon: 'layout', title: 'Design', description: 'Premium aesthetics with focus on user engagement and conversion.' }
+          { icon: 'zap', title: 'Performance', description: 'Blazing fast load times.' },
+          { icon: 'shield', title: 'Security', description: 'Enterprise-grade protection.' },
+          { icon: 'brain', title: 'Intelligence', description: 'Advanced AI driven workflows.' },
+          { icon: 'layout', title: 'Design', description: 'Premium aesthetics with focus.' }
         ];
       }
 
       if (layout === 'stats') {
         content.stats = [
-          { value: '98%', label: 'Uptime', description: 'Guaranteed reliability for mission critical systems.' },
-          { value: '4.8/5', label: 'Satisfaction', description: 'Consistently rated as the industry leader.' },
-          { value: '12x', label: 'Growth', description: 'Scalable infrastructure for exponential success.' }
+          { value: '98%', label: 'Uptime', description: 'Guaranteed reliability.' },
+          { value: '4.8/5', label: 'Satisfaction', description: 'Industry leader.' },
+          { value: '12x', label: 'Growth', description: 'Scalable infrastructure.' }
         ];
       }
 
-      if (layout === 'timeline' || layout === 'timelineEvents') {
+      if (['timeline', 'timelineEvents'].includes(layout)) {
         content.timelineEvents = [
-          { date: 'Phase 1', title: 'Strategy', description: 'Core objective setting and market research phase.' },
-          { date: 'Phase 2', title: 'Execution', description: 'Rapid development and iterative deployment cycle.' },
-          { date: 'Phase 3', title: 'Optimization', description: 'Scaling and performance tuning for global reach.' }
+          { date: 'Phase 1', title: 'Strategy', description: 'Core objective setting.' },
+          { date: 'Phase 2', title: 'Execution', description: 'Iterative deployment cycle.' },
+          { date: 'Phase 3', title: 'Optimization', description: 'Scaling and performance.' }
         ];
       }
 
-      if (layout === 'steps' || layout === 'process-flow') {
+      if (['steps', 'process-flow'].includes(layout)) {
         content.steps = [
-          { title: 'Discovery', description: 'Deep dive into user needs and project requirements.' },
-          { title: 'Prototyping', description: 'Rapid wireframing and interactive design testing.' },
-          { title: 'Launch', description: 'Final verification and full-scale market release.' }
+          { title: 'Discovery', description: 'Deep dive into user needs.' },
+          { title: 'Prototyping', description: 'Interactive design testing.' },
+          { title: 'Launch', description: 'Full-scale market release.' }
         ];
       }
 
@@ -383,7 +413,7 @@ Generate ${slideCount} slides now as a JSON array. Each slide object: { layout, 
       if (layout === 'quote') {
         content.quote = {
           text: 'Innovation distinguishes between a leader and a follower.',
-          author: 'Steve Jobs, Co-founder of Apple'
+          author: 'Steve Jobs'
         };
       }
 
